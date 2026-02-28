@@ -1,6 +1,7 @@
 #if !defined(CHIP_TYPES_H)
 #define CHIP_TYPES_H
 
+#include <errno.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
