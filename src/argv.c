@@ -1,0 +1,102 @@
+#include "argv.h"
+#include <getopt.h>
+#include <stdio.h>
+
+static struct option const opts[] = {
+	{
+		.name	 = "width",
+		.has_arg = required_argument,
+		.flag	 = nullptr,
+		.val	 = 'W',
+	 },
+	{
+		.name	 = "height",
+		.has_arg = required_argument,
+		.flag	 = nullptr,
+		.val	 = 'H',
+	 },
+	{
+		.name	 = "clk",
+		.has_arg = required_argument,
+		.flag	 = nullptr,
+		.val	 = 'C',
+	 },
+	{
+		.name	 = "help",
+		.has_arg = no_argument,
+		.flag	 = nullptr,
+		.val	 = 'h',
+	 },
+	{0},
+};
+
+static void	   _print_usage(char const *prog);
+static enum status _parse_argv_impl(
+	struct config *config, i32 argc, char *argv[const]);
+
+enum status
+parse_argv(struct config *config, i32 argc, char *argv[const])
+{
+	enum status const sv = _parse_argv_impl(config, argc, argv);
+	if (sv == E_ARG_PARSE) {
+		_print_usage(argv[0]);
+	}
+	return sv;
+}
+
+enum status
+_parse_argv_impl(struct config *config, i32 argc, char *argv[const])
+{
+
+	/* default options */
+	struct config tmp = {
+		.window_width  = 640,
+		.window_height = 480,
+		.clock_speed   = 60,
+	};
+
+	for (;;) {
+		i32 rv = getopt_long_only(argc, argv, "", opts, nullptr);
+		if (rv == -1) {
+			break;
+		}
+		switch (rv) {
+		case 'W':
+			tmp.window_width = SDL_strtoul(optarg, nullptr, 0);
+			tmp.window_width = SDL_max(tmp.window_width, 640);
+			break;
+		case 'H':
+			tmp.window_height = SDL_strtoul(optarg, nullptr, 0);
+			tmp.window_height = SDL_max(tmp.window_height, 480);
+			break;
+		case 'C':
+			tmp.clock_speed = SDL_strtoul(optarg, nullptr, 0);
+			tmp.clock_speed = SDL_max(tmp.clock_speed, 60);
+			break;
+		default:
+			return E_ARG_PARSE;
+		}
+	}
+
+	if (optind == argc) {
+		/* mandatory arguments missing! */
+		return E_ARG_PARSE;
+	}
+
+	tmp.rom_file = argv[optind];
+	*config	     = tmp;
+	return E_OK;
+}
+
+static void
+_print_usage(char const *prog)
+{
+	printf("Usage: %s [options] <rom-file>\n\n"
+	       "Options:\n"
+	       "    --width=N		width of the window [default: 640]\n"
+	       "    --height=N		height of the window [default: 480]\n"
+	       "    --clk=N		clock frequency of the emulator in Hz "
+	       "[default: 60Hz]\n"
+	       "    --help		show this help message\n",
+		prog);
+}

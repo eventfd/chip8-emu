@@ -1,16 +1,12 @@
 #include "chip.h"
+#include "argv.h"
 #include "config.h"
 #include "rom.h"
 #include <SDL3/SDL.h>
-#include <getopt.h>
-#include <stdio.h>
 
 #define HZ_TO_NS(hz) (UINT64_C(1000000000) / (hz))
 
-static u64  _clock_pulse(void *userdata, SDL_TimerID timerID, u64 interval);
-static void print_usage(char const *prog);
-static enum status parse_argv(
-	struct config *config, i32 argc, char *argv[const]);
+static u64 _clock_pulse(void *userdata, SDL_TimerID timerID, u64 interval);
 
 enum status
 chip_main(i32 argc, char *argv[const])
@@ -20,7 +16,6 @@ chip_main(i32 argc, char *argv[const])
 
 	sv = parse_argv(&ctx.config, argc, argv);
 	if (sv != E_OK) {
-		print_usage(argv[0]);
 		goto _exit;
 	}
 
@@ -103,88 +98,4 @@ _clock_pulse(void *userdata, SDL_TimerID timerID, u64 interval)
 		},
 	 });
 	return HZ_TO_NS(ctx->config.clock_speed);
-}
-
-void
-print_usage(char const *prog)
-{
-	printf("Usage: %s [options] <rom-file>\n\n"
-	       "Options:\n"
-	       "    --width=N		width of the window [default: 640]\n"
-	       "    --height=N		height of the window [default: 480]\n"
-	       "    --clk=N		clock frequency of the emulator in Hz "
-	       "[default: 60Hz]\n"
-	       "    --help		show this help message\n",
-		prog);
-}
-
-static enum status
-parse_argv(struct config *config, i32 argc, char *argv[const])
-{
-	static struct option const opts[] = {
-		{
-			.name	 = "width",
-			.has_arg = required_argument,
-			.flag	 = nullptr,
-			.val	 = 'W',
-		 },
-		{
-			.name	 = "height",
-			.has_arg = required_argument,
-			.flag	 = nullptr,
-			.val	 = 'H',
-		 },
-		{
-			.name	 = "clk",
-			.has_arg = required_argument,
-			.flag	 = nullptr,
-			.val	 = 'C',
-		 },
-		{
-			.name	 = "help",
-			.has_arg = no_argument,
-			.flag	 = nullptr,
-			.val	 = 'h',
-		 },
-		{0},
-	};
-
-	/* default options */
-	struct config tmp = {
-		.window_width  = 640,
-		.window_height = 480,
-		.clock_speed   = 60,
-	};
-
-	for (;;) {
-		i32 rv = getopt_long_only(argc, argv, "", opts, nullptr);
-		if (rv == -1) {
-			break;
-		}
-		switch (rv) {
-		case 'W':
-			tmp.window_width = SDL_strtoul(optarg, nullptr, 0);
-			tmp.window_width = SDL_max(tmp.window_width, 640);
-			break;
-		case 'H':
-			tmp.window_height = SDL_strtoul(optarg, nullptr, 0);
-			tmp.window_height = SDL_max(tmp.window_height, 480);
-			break;
-		case 'C':
-			tmp.clock_speed = SDL_strtoul(optarg, nullptr, 0);
-			tmp.clock_speed = SDL_max(tmp.clock_speed, 60);
-			break;
-		default:
-			return E_ARG_PARSE;
-		}
-	}
-
-	if (optind == argc) {
-		/* mandatory arguments missing! */
-		return E_ARG_PARSE;
-	}
-
-	tmp.rom_file = argv[optind];
-	*config	     = tmp;
-	return E_OK;
 }
