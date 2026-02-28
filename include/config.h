@@ -6,8 +6,8 @@
 struct config {
 	u32	    window_width;
 	u32	    window_height;
-	char const *window_title;
 	u32	    clock_speed; /* Hz */
+	char const *rom_file;
 };
 
 enum event_type {
