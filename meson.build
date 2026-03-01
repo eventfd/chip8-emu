@@ -5,7 +5,9 @@ src = files(
       'src/main.c'
     , 'src/rom.c'
     , 'src/chip.c'
-    , 'src/argv.c')
+    , 'src/argv.c'
+    , 'src/vm.c'
+)
 
 sdl = dependency('sdl3')
 executable('chip8'

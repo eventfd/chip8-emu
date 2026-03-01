@@ -4,15 +4,11 @@
 #include "typedefs.h"
 
 struct config {
+	char const *rom_file;
 	u32	    window_width;
 	u32	    window_height;
 	u32	    clock_speed; /* Hz */
-	char const *rom_file;
-};
-
-enum event_type {
-	EV_CLOCK_TICK = 1,
-	EV_PAINT      = 2,
+	u8	    verbose;
 };
 
 #endif // CHIP_CONFIG

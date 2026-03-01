@@ -27,6 +27,12 @@ static struct option const opts[] = {
 		.flag	 = nullptr,
 		.val	 = 'h',
 	 },
+	{
+		.name	 = "verbose",
+		.has_arg = no_argument,
+		.flag	 = nullptr,
+		.val	 = 'V',
+	 },
 	{0},
 };
 
@@ -53,6 +59,7 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 		.window_width  = 640,
 		.window_height = 480,
 		.clock_speed   = 60,
+		.verbose       = 0,
 	};
 
 	for (;;) {
@@ -72,6 +79,9 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 		case 'C':
 			tmp.clock_speed = SDL_strtoul(optarg, nullptr, 0);
 			tmp.clock_speed = SDL_max(tmp.clock_speed, 60);
+			break;
+		case 'V':
+			tmp.verbose = 1;
 			break;
 		default:
 			return E_ARG_PARSE;

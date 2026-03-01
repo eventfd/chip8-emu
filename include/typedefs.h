@@ -2,6 +2,7 @@
 #define CHIP_TYPES_H
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
