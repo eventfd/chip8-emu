@@ -3,13 +3,15 @@
 
 #include "config.h"
 #include "typedefs.h"
+#include "vm.h"
 #include <SDL3/SDL.h>
 
 #define DEF_STATUS(F)                                                \
 	F(E_OK, "Ok")                                                \
 	F(E_ARG_PARSE, "Argument Parsing failed")                    \
 	F(E_SDL_INIT, "SDL initialization failed")                   \
-	F(E_SDL_WIN_INIT, "SDL Window initialization failed")        \
+	F(E_SDL_WIN_INIT, "SDL Window creation failed")              \
+	F(E_SDL_TEXTURE_INIT, "SDL Texture creation failed")         \
 	F(E_FILE_PERM_READ, "Insufficient permissions to read file") \
 	F(E_FILE_PATH_INV, "Invalid file path")                      \
 	F(E_FILE_EXIST, "File does not exist")                       \
@@ -25,21 +27,11 @@ enum status {
 #undef ITER
 };
 
-struct vm {
-	u8  regs[16];
-	u8  stack[64];
-	u8  fb[64][32];
-	u16 pc;
-	u16 ir;
-	u8  sp;
-	u8  delay_timer;
-	u8  sound_timer;
-	u8  code[0xe00];
-	u32 code_size;
-};
-
 struct context {
 	SDL_RWLock   *rwlock;
+	SDL_Window   *window;
+	SDL_Renderer *renderer;
+	SDL_Texture  *texture;
 	struct config config;
 	u32	      user_event;
 	struct vm     vm;
