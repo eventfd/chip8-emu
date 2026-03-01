@@ -6,6 +6,7 @@
 #include <SDL3/SDL.h>
 
 #define HZ_TO_NS(hz) (UINT64_C(1000000000) / (hz))
+#define RGB(r, g, b) ((u32)(r) | (u32)(g) << 8 | (u32)(b) << 16)
 
 static u64  _clock_pulse(void *userdata, SDL_TimerID timerID, u64 interval);
 static void _vm_on_event(struct vm const *vm, enum vm_event ev, void *arg);
@@ -15,7 +16,7 @@ static void _handle_event(struct context *ctx, SDL_UserEvent const *event);
 enum status
 chip_main(i32 argc, char *argv[const])
 {
-	enum status    sv    = 0;
+	enum status    sv    = E_OK;
 	struct context ctx   = {0};
 	SDL_Event      event = {0};
 
@@ -26,8 +27,8 @@ chip_main(i32 argc, char *argv[const])
 
 	if (ctx.config.verbose) {
 		SDL_Log("ROM File: %s", ctx.config.rom_file);
-		SDL_Log("Width: %u", ctx.config.window_width);
-		SDL_Log("Height: %u", ctx.config.window_height);
+		SDL_Log("Width: %u", ctx.config.width);
+		SDL_Log("Height: %u", ctx.config.height);
 		SDL_Log("Clock (Hz): %u", ctx.config.clock_speed);
 	}
 
@@ -47,7 +48,7 @@ chip_main(i32 argc, char *argv[const])
 	ctx.rwlock     = SDL_CreateRWLock();
 
 	bool const rv = SDL_CreateWindowAndRenderer("CHIP8 Emulator",
-		ctx.config.window_width, ctx.config.window_height,
+		ctx.config.width, ctx.config.height,
 		SDL_WINDOW_HIGH_PIXEL_DENSITY, &ctx.window, &ctx.renderer);
 	if (!rv) {
 		sv = E_SDL_WIN_INIT;
@@ -58,8 +59,8 @@ chip_main(i32 argc, char *argv[const])
 	}
 
 	SDL_Texture *const texture = SDL_CreateTexture(ctx.renderer,
-		SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET,
-		ctx.config.window_height, ctx.config.window_height);
+		SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
+		ctx.config.width, ctx.config.height);
 	if (!texture) {
 		sv = E_SDL_TEXTURE_INIT;
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
@@ -90,6 +91,10 @@ chip_main(i32 argc, char *argv[const])
 						    .data1 = &event.key,
 					    });
 		}
+
+		SDL_RenderClear(ctx.renderer);
+		SDL_RenderTexture(ctx.renderer, ctx.texture, nullptr, nullptr);
+		SDL_RenderPresent(ctx.renderer);
 	}
 
 _exit_loop:
@@ -118,8 +123,10 @@ _put_event(i32 code, void *data1, void *data2)
 }
 
 u64
-_clock_pulse(void *userdata, SDL_TimerID timerID, u64 interval)
+_clock_pulse(void *userdata, SDL_TimerID timer_id, u64 interval)
 {
+	UNUSED(timer_id);
+	UNUSED(interval);
 	struct context *const ctx = (struct context *)userdata;
 
 	/* evaluate sound timer */
@@ -142,6 +149,8 @@ _clock_pulse(void *userdata, SDL_TimerID timerID, u64 interval)
 void
 _vm_on_event(struct vm const *vm, enum vm_event ev, void *arg)
 {
+	UNUSED(vm);
+
 	switch (ev) {
 	case EV_CLS:
 		_put_event(EV_CLS, nullptr, nullptr);
@@ -158,14 +167,25 @@ void
 _handle_event(struct context *ctx, SDL_UserEvent const *event)
 {
 	SDL_KeyboardEvent const *kev = (SDL_KeyboardEvent const *)event->data1;
-	u32			*pixels = nullptr;
-	i32			 row_len;
+
+	u8 *pixels;
+	i32 row_len;
+
+	bool const rv = SDL_LockTexture(
+		ctx->texture, nullptr, (void **)&pixels, &row_len);
+	if (!rv) {
+		return;
+	}
 
 	switch (event->code) {
 	case EV_CLS:
-		SDL_LockTexture(
-			ctx->texture, nullptr, (void **)&pixels, &row_len);
-		SDL_UnlockTexture(ctx->texture);
+		/* clear screen to black */
+		for (u32 i = 0; i != ctx->config.width * ctx->config.height;
+			i++) {
+			pixels[i * 3]	  = 0;
+			pixels[i * 3 + 1] = 0;
+			pixels[i * 3 + 2] = 0;
+		}
 		break;
 	case EV_KEY_PRESS:
 		if (ctx->config.verbose) {
@@ -182,6 +202,7 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 		break;
 	}
 
+	SDL_UnlockTexture(ctx->texture);
 	/* unblock the cpu */
 	atomic_store(&ctx->vm.state, VM_IDLE);
 }

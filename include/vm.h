@@ -19,17 +19,17 @@ enum vm_state {
 };
 
 struct vm {
+	u8		       code[0xe00];
+	u32		       code_size;
 	u8		       regs[16];
 	u8		       stack[64];
 	u8		       fb[64][32];
 	u16		       pc;
 	u16		       ir;
-	u8		       sp;
-	u8		       kbd_r;
+	u16		       sp;
+	u16		       kbd_r;
 	i16		       delay_timer;
 	i16		       sound_timer;
-	u8		       code[0xe00];
-	u32		       code_size;
 	_Atomic(enum vm_state) state;
 };
 

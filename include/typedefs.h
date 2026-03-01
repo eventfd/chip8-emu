@@ -3,21 +3,22 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <stdalign.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#define _DEF_INT(size)                  \
+#define MKINT(size)                     \
 	typedef int##size##_t  i##size; \
 	typedef uint##size##_t u##size
 
-_DEF_INT(8);
-_DEF_INT(16);
-_DEF_INT(32);
-_DEF_INT(64);
+MKINT(8);
+MKINT(16);
+MKINT(32);
+MKINT(64);
 
-#undef _DEF_INT
+#undef MKINT
 
 typedef float  f32;
 typedef double f64;
@@ -25,6 +26,6 @@ typedef double f64;
 typedef intptr_t  isize;
 typedef uintptr_t usize;
 
-#define nullptr NULL
+#define UNUSED(arg) ((void)(arg))
 
 #endif // CHIP_TYPES_H

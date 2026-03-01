@@ -40,7 +40,7 @@ vm_step(struct vm *vm, vm_callback_fn callback)
 	switch ((raw_opcode >> 12) & 0xfu) {
 	case 0x6:
 		imm	    = raw_opcode & 0xffu;
-		r	    = (raw_opcode >> 8) & 0xfu;
+		r	    = (raw_opcode >> 8) & 0x0fu;
 		vm->regs[r] = imm;
 		break;
 	case 0xa:

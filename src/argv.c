@@ -56,10 +56,10 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 
 	/* default options */
 	struct config tmp = {
-		.window_width  = 640,
-		.window_height = 480,
-		.clock_speed   = 60,
-		.verbose       = 0,
+		.width	     = 640,
+		.height	     = 480,
+		.clock_speed = 60,
+		.verbose     = 0,
 	};
 
 	for (;;) {
@@ -69,12 +69,12 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 		}
 		switch (rv) {
 		case 'W':
-			tmp.window_width = SDL_strtoul(optarg, nullptr, 0);
-			tmp.window_width = SDL_max(tmp.window_width, 640);
+			tmp.width = SDL_strtoul(optarg, nullptr, 0);
+			tmp.width = SDL_max(tmp.width, 640);
 			break;
 		case 'H':
-			tmp.window_height = SDL_strtoul(optarg, nullptr, 0);
-			tmp.window_height = SDL_max(tmp.window_height, 480);
+			tmp.height = SDL_strtoul(optarg, nullptr, 0);
+			tmp.height = SDL_max(tmp.height, 480);
 			break;
 		case 'C':
 			tmp.clock_speed = SDL_strtoul(optarg, nullptr, 0);
