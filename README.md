@@ -1,7 +1,15 @@
 # CHIP-8 Emulator
 
-Here's my implementation of CHIP-8 Emulator in C17
+Another implementation of CHIP-8 Emulator in C23
 
-## Dependencies
+## Getting Started
 
-- SDL3
+If you're running Fedora, you can follow the below steps:
+
+```bash
+sudo dnf install meson SDL3-devel
+cd chip8-emu
+meson setup build
+cd build
+ninja
+```
