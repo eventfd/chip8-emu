@@ -12,6 +12,7 @@
 	F(E_SDL_INIT, "SDL initialization failed")                   \
 	F(E_SDL_WIN_INIT, "SDL Window creation failed")              \
 	F(E_SDL_TEXTURE_INIT, "SDL Texture creation failed")         \
+	F(E_SDL_AUDIO_INIT, "SDL Audio initialization failed")       \
 	F(E_FILE_PERM_READ, "Insufficient permissions to read file") \
 	F(E_FILE_PATH_INV, "Invalid file path")                      \
 	F(E_FILE_EXIST, "File does not exist")                       \
@@ -28,13 +29,14 @@ enum status {
 };
 
 struct context {
-	SDL_RWLock   *rwlock;
-	SDL_Window   *window;
-	SDL_Renderer *renderer;
-	SDL_Texture  *texture;
-	struct config config;
-	u32	      user_event;
-	struct vm     vm;
+	SDL_RWLock	*rwlock;
+	SDL_Window	*window;
+	SDL_Renderer	*renderer;
+	SDL_AudioStream *audio_stream;
+	SDL_Texture	*texture;
+	struct config	 config;
+	u32		 user_event;
+	struct vm	 vm;
 };
 
 #endif // CHIP_H
