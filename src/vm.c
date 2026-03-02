@@ -80,11 +80,13 @@ vm_step(struct vm *vm, vm_callback_fn callback)
 	case 0xf:
 		switch (raw_opcode & 0xffu) {
 		case 0xa:
+			/* LD Vx, K */
 			r	  = (raw_opcode >> 8) & 0xfu;
 			vm->kbd_r = r;
 			callback(vm, EV_KEY_PRESS, &vm->regs[r]);
 			break;
 		case 0x18:
+			/* LD ST, Vx */
 			r		= (raw_opcode >> 8) & 0xfu;
 			vm->sound_timer = vm->regs[r];
 			break;
