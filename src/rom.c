@@ -6,6 +6,7 @@ parse_rom(struct vm *vm, struct config const *cfg)
 {
 	enum status sv = E_OK;
 
+	vm_init(vm);
 	FILE *file = fopen(cfg->rom_file, "rb");
 	if (!file) {
 		i32 const _err = errno;
@@ -74,11 +75,13 @@ parse_rom(struct vm *vm, struct config const *cfg)
 		goto _clean_exit;
 	}
 
-	i32 const _nbytes = fread(vm->code, 1, _pos, file);
-	if (_nbytes != _pos) {
+	i32 const n_read = fread(vm->code, 1, _pos, file);
+	if (n_read != _pos) {
 		sv = E_FILE_SIZE_MISMATCH;
 		goto _clean_exit;
 	}
+
+	vm->code_size = n_read;
 
 _clean_exit:
 	fclose(file);

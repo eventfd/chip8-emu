@@ -9,9 +9,16 @@
 #define RGB(r, g, b) ((u32)(r) | (u32)(g) << 8 | (u32)(b) << 16)
 
 static u64  _clock_pulse(void *userdata, SDL_TimerID timerID, u64 interval);
-static void _vm_on_event(struct vm const *vm, enum vm_event ev, void *arg);
+static void _vm_on_event(struct vm *vm, enum vm_event ev, void *arg);
 static void _put_event(i32 code, void *data1, void *data2);
 static void _handle_event(struct context *ctx, SDL_UserEvent const *event);
+static void _play_beep(struct context *ctx);
+
+constexpr u32 AUDIO_FREQ      = 441;
+constexpr u32 SAMPLE_RATE     = 44100;
+constexpr u32 SAMPLE_DURATION = 300; /* millis */
+constexpr u32 AUDIO_SIZE      = SAMPLE_RATE * SAMPLE_DURATION / 1000;
+static u8     audio_samples[AUDIO_SIZE];
 
 enum status
 chip_main(i32 argc, char *argv[const])
@@ -72,6 +79,33 @@ chip_main(i32 argc, char *argv[const])
 	/* clear the screen first */
 	_vm_on_event(&ctx.vm, EV_CLS, nullptr);
 
+	/* initialize audio device */
+	SDL_AudioSpec const audio_spec = {
+		.format	  = SDL_AUDIO_U8,
+		.channels = 2,
+		.freq	  = SAMPLE_RATE,
+	};
+	SDL_AudioStream *audio_stream
+		= SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+			&audio_spec, nullptr, nullptr);
+	if (!audio_stream) {
+		sv = E_SDL_AUDIO_INIT;
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+			"SDL_OpenAudioDeviceStream failed: %s", SDL_GetError());
+		goto _exit_loop;
+	}
+
+	ctx.audio_stream = audio_stream;
+	for (u32 i = 0; i != AUDIO_SIZE; i++) {
+		f64 const time = (f64)i / (f64)SAMPLE_RATE;
+		f64 const _sin
+			= SDL_sin(2.0 * SDL_PI_F * (f64)AUDIO_FREQ * time)
+				  * 127.0
+			  + 128.0;
+		audio_samples[i] = (u8)_sin;
+	}
+
+	/* initialize clock */
 	SDL_AddTimerNS(
 		HZ_TO_NS(ctx.config.clock_speed), _clock_pulse, (void *)&ctx);
 
@@ -96,6 +130,8 @@ chip_main(i32 argc, char *argv[const])
 		SDL_RenderTexture(ctx.renderer, ctx.texture, nullptr, nullptr);
 		SDL_RenderPresent(ctx.renderer);
 	}
+
+	SDL_DestroyAudioStream(ctx.audio_stream);
 
 _exit_loop:
 	SDL_DestroyRenderer(ctx.renderer);
@@ -132,8 +168,11 @@ _clock_pulse(void *userdata, SDL_TimerID timer_id, u64 interval)
 	/* evaluate sound timer */
 	i16 const sound_timer = ctx->vm.sound_timer;
 	if (sound_timer >= 0) {
-		sound_timer == 0 ? _put_event(EV_SOUND, nullptr, nullptr)
-				 : (void)0;
+		if (!sound_timer) {
+			atomic_store(&ctx->vm.state, VM_WAIT);
+			SDL_Log("Sound Event at Addr: %#x", ctx->vm.pc);
+			_put_event(EV_SOUND, nullptr, nullptr);
+		}
 		ctx->vm.sound_timer = sound_timer - 1;
 	}
 
@@ -147,8 +186,9 @@ _clock_pulse(void *userdata, SDL_TimerID timer_id, u64 interval)
 }
 
 void
-_vm_on_event(struct vm const *vm, enum vm_event ev, void *arg)
+_vm_on_event(struct vm *vm, enum vm_event ev, void *arg)
 {
+	atomic_store(&vm->state, VM_WAIT);
 	UNUSED(vm);
 
 	switch (ev) {
@@ -174,7 +214,7 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 	bool const rv = SDL_LockTexture(
 		ctx->texture, nullptr, (void **)&pixels, &row_len);
 	if (!rv) {
-		return;
+		goto _exit;
 	}
 
 	switch (event->code) {
@@ -196,7 +236,7 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 		}
 		break;
 	case EV_SOUND:
-		/* TODO: Play Beep Sound */
+		_play_beep(ctx);
 		break;
 	default:
 		break;
@@ -204,5 +244,15 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 
 	SDL_UnlockTexture(ctx->texture);
 	/* unblock the cpu */
+_exit:
 	atomic_store(&ctx->vm.state, VM_IDLE);
+}
+
+void
+_play_beep(struct context *ctx)
+{
+	SDL_ResumeAudioStreamDevice(ctx->audio_stream);
+	SDL_PutAudioStreamData(ctx->audio_stream, audio_samples, AUDIO_SIZE);
+	SDL_Delay(SAMPLE_DURATION);
+	SDL_PauseAudioStreamDevice(ctx->audio_stream);
 }

@@ -13,9 +13,8 @@ enum vm_event {
 };
 
 enum vm_state {
-	VM_IDLE	  = 0,
-	VM_OUTPUT = 1,
-	VM_INPUT  = 2,
+	VM_IDLE = 0,
+	VM_WAIT = 1,
 };
 
 struct vm {
@@ -33,8 +32,9 @@ struct vm {
 	_Atomic(enum vm_state) state;
 };
 
-typedef void (*vm_callback_fn)(
-	struct vm const *vm, enum vm_event ev, void *arg);
+typedef void (*vm_callback_fn)(struct vm *vm, enum vm_event ev, void *arg);
+
+void vm_init(struct vm *vm);
 void vm_step(struct vm *vm, vm_callback_fn callback);
 
 #endif // CHIP8_VM_H
