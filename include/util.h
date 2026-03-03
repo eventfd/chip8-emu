@@ -3,4 +3,10 @@
 
 void asm_break(void);
 
+#define _STR(x) #x
+#define STR(x)	_STR(x)
+
+#define LOG_ERROR(ty, fmt, ...)                                           \
+	SDL_LogError(ty, __FILE__ ":" STR(__LINE__) " " fmt, __VA_ARGS__)
+
 #endif // CHIP8_UTIL_H

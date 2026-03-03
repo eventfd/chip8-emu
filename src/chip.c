@@ -4,6 +4,7 @@
 #include "config.h"
 #include "rand.h"
 #include "rom.h"
+#include "util.h"
 #include "vm.h"
 #include <SDL3/SDL.h>
 
@@ -38,8 +39,8 @@ chip_main(i32 argc, char *argv[const])
 
 	if (ctx.config.verbose) {
 		SDL_Log("ROM File: %s", ctx.config.rom_file);
-		SDL_Log("Width: %u", ctx.config.width);
-		SDL_Log("Height: %u", ctx.config.height);
+		SDL_Log("Width: %u", ctx.config.dx);
+		SDL_Log("Height: %u", ctx.config.dy);
 		SDL_Log("Clock (Hz): %u", ctx.config.clock_speed);
 	}
 
@@ -50,8 +51,8 @@ chip_main(i32 argc, char *argv[const])
 
 	if (!SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO)) {
 		sv = E_SDL_INIT;
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-			"SDL_Init failed: %s", SDL_GetError());
+		LOG_ERROR(SDL_LOG_CATEGORY_APPLICATION, "SDL_Init failed: %s",
+			SDL_GetError());
 		goto _exit;
 	}
 
@@ -59,11 +60,11 @@ chip_main(i32 argc, char *argv[const])
 	ctx.rwlock     = SDL_CreateRWLock();
 
 	bool const rv = SDL_CreateWindowAndRenderer("CHIP8 Emulator",
-		ctx.config.width, ctx.config.height,
+		ctx.config.dx * 64, ctx.config.dy * 32,
 		SDL_WINDOW_HIGH_PIXEL_DENSITY, &ctx.window, &ctx.renderer);
 	if (!rv) {
 		sv = E_SDL_WIN_INIT;
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+		LOG_ERROR(SDL_LOG_CATEGORY_APPLICATION,
 			"SDL_CreateWindowAndRenderer failed: %s",
 			SDL_GetError());
 		goto _clean_exit;
@@ -71,10 +72,10 @@ chip_main(i32 argc, char *argv[const])
 
 	SDL_Texture *const texture = SDL_CreateTexture(ctx.renderer,
 		SDL_PIXELFORMAT_RGB332, SDL_TEXTUREACCESS_STREAMING,
-		ctx.config.width, ctx.config.height);
+		ctx.config.dx * 64, ctx.config.dy * 32);
 	if (!texture) {
 		sv = E_SDL_TEXTURE_INIT;
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+		LOG_ERROR(SDL_LOG_CATEGORY_APPLICATION,
 			"SDL_CreateTexture failed: %s", SDL_GetError());
 		goto _exit_loop;
 	}
@@ -94,7 +95,7 @@ chip_main(i32 argc, char *argv[const])
 			&audio_spec, nullptr, nullptr);
 	if (!audio_stream) {
 		sv = E_SDL_AUDIO_INIT;
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+		LOG_ERROR(SDL_LOG_CATEGORY_APPLICATION,
 			"SDL_OpenAudioDeviceStream failed: %s", SDL_GetError());
 		goto _exit_loop;
 	}
@@ -212,7 +213,8 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 	SDL_KeyboardEvent const *kev = (SDL_KeyboardEvent const *)event->data1;
 
 	u8  *pixels;
-	i32  width;
+	i32  tmp_w;
+	u32  width, height;
 	bool rv;
 
 	switch (event->code) {
@@ -230,15 +232,18 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 		break;
 	case EV_DRAW:
 		rv = SDL_LockTexture(
-			ctx->texture, nullptr, (void **)&pixels, &width);
+			ctx->texture, nullptr, (void **)&pixels, &tmp_w);
 		if (!rv) {
 			break;
 		}
 		/* sync the framebuffer */
-		for (u32 y = 0; y != ctx->config.height; y++) {
-			for (u32 x = 0; x != ctx->config.width; x++) {
-				pixels[y * ctx->config.width + x]
-					= ctx->vm.fb[64 * (y / 15) + x / 10];
+		width  = ctx->config.dx * 64;
+		height = ctx->config.dy * 32;
+		for (u32 y = 0; y != height; y++) {
+			for (u32 x = 0; x != width; x++) {
+				pixels[y * width + x]
+					= ctx->vm.fb[64 * (y / ctx->config.dy)
+						     + x / ctx->config.dx];
 			}
 		}
 		SDL_UnlockTexture(ctx->texture);

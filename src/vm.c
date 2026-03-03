@@ -5,16 +5,13 @@
 #include <stdio.h>
 #include <string.h>
 
-static void disasm_instr(struct vm const *vm);
+typedef void (*disasm_cb_fn)(char const *str);
+
+static void disasm_instr(struct vm const *vm, disasm_cb_fn cb);
+static void _puts(char const *str);
 
 #define READ_INSTR(ptr, off)                                 \
 	((u16)((ptr)[(off)]) << 8 | (u16)((ptr)[(off) + 1]))
-
-typedef u8 sprite_t[5];
-
-sprite_t sprites[] = {
-	[8] = {0xf0, 0x90, 0xf0, 0x90, 0xf0},
-};
 
 void
 vm_init(struct vm *vm)
@@ -25,7 +22,7 @@ vm_init(struct vm *vm)
 }
 
 void
-vm_step(struct vm *vm, vm_callback_fn callback)
+vm_step(struct vm *vm, vm_cb_fn callback)
 {
 	/*
 	 * VM cannot proceed until the previous instruction is committed
@@ -47,7 +44,7 @@ vm_step(struct vm *vm, vm_callback_fn callback)
 	struct context const *ctx
 		= (struct context const *)container_of(vm, struct context, vm);
 	if (ctx->config.disasm) {
-		disasm_instr(vm);
+		disasm_instr(vm, _puts);
 	}
 
 	/* handlers */
@@ -283,7 +280,7 @@ vm_step(struct vm *vm, vm_callback_fn callback)
 }
 
 void
-disasm_instr(struct vm const *vm)
+disasm_instr(struct vm const *vm, disasm_cb_fn cb)
 {
 	static char buffer[128];
 	memset(buffer, 0, sizeof buffer);
@@ -463,5 +460,11 @@ disasm_instr(struct vm const *vm)
 		break;
 	}
 
-	puts(buffer);
+	cb(buffer);
+}
+
+void
+_puts(char const *str)
+{
+	(void)puts(str);
 }

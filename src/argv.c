@@ -4,13 +4,13 @@
 
 static struct option const opts[] = {
 	{
-		.name	 = "width",
+		.name	 = "dx",
 		.has_arg = required_argument,
 		.flag	 = nullptr,
 		.val	 = 'W',
 	 },
 	{
-		.name	 = "height",
+		.name	 = "dy",
 		.has_arg = required_argument,
 		.flag	 = nullptr,
 		.val	 = 'H',
@@ -22,7 +22,7 @@ static struct option const opts[] = {
 		.val	 = 'C',
 	 },
 	{
-		.name	 = "disasm",
+		.name	 = "asm",
 		.has_arg = no_argument,
 		.flag	 = nullptr,
 		.val	 = 'D',
@@ -62,11 +62,11 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 
 	/* default options */
 	struct config tmp = {
-		.width	     = 640,
-		.height	     = 480,
+		.dx    = 10,
+		.dy   = 15,
 		.clock_speed = 60,
 		.verbose     = 0,
-		.disasm	     = true,
+		.disasm	     = 0,
 	};
 
 	for (;;) {
@@ -76,12 +76,12 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 		}
 		switch (rv) {
 		case 'W':
-			tmp.width = SDL_strtoul(optarg, nullptr, 0);
-			tmp.width = SDL_max(tmp.width, 640);
+			tmp.dx = SDL_strtoul(optarg, nullptr, 0);
+			tmp.dx = SDL_max(tmp.dx, 1);
 			break;
 		case 'H':
-			tmp.height = SDL_strtoul(optarg, nullptr, 0);
-			tmp.height = SDL_max(tmp.height, 480);
+			tmp.dy = SDL_strtoul(optarg, nullptr, 0);
+			tmp.dy = SDL_max(tmp.dy, 1);
 			break;
 		case 'C':
 			tmp.clock_speed = SDL_strtoul(optarg, nullptr, 0);
@@ -92,6 +92,7 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 			break;
 		case 'V':
 			tmp.verbose = 1;
+			tmp.disasm  = true;
 			break;
 		default:
 			return E_ARG_PARSE;
@@ -113,10 +114,14 @@ _print_usage(char const *prog)
 {
 	printf("Usage: %s [options] <rom-file>\n\n"
 	       "Options:\n"
-	       "    --width=N		width of the window [default: 640]\n"
-	       "    --height=N		height of the window [default: 480]\n"
+	       "    --dx=N		scaled width of each pixel "
+	       "[default: 10]\n"
+	       "    --dy=N		scaled height of each pixel "
+	       "[default: 15]\n"
 	       "    --clk=N		clock frequency of the emulator in Hz "
 	       "[default: 60Hz]\n"
+	       "    --asm		disassemble instructions [default: "
+	       "false]\n"
 	       "    --help		show this help message\n",
 		prog);
 }
