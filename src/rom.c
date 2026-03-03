@@ -4,9 +4,9 @@
 enum status
 parse_rom(struct vm *vm, struct config const *cfg)
 {
+	static u8   buffer[0xe00];
 	enum status sv = E_OK;
 
-	vm_init(vm);
 	FILE *file = fopen(cfg->rom_file, "rb");
 	if (!file) {
 		i32 const _err = errno;
@@ -56,7 +56,7 @@ parse_rom(struct vm *vm, struct config const *cfg)
 	}
 
 	/* max addressable space is 0xe00 bytes */
-	if (_pos + 0x200 > (isize)sizeof(vm->mem)) {
+	if (_pos > (isize)sizeof(buffer)) {
 		sv = E_FILE_TOO_LARGE;
 		goto _clean_exit;
 	}
@@ -75,14 +75,13 @@ parse_rom(struct vm *vm, struct config const *cfg)
 		goto _clean_exit;
 	}
 
-	i32 const n_read = fread(&vm->mem[0x200], 1, _pos, file);
-	if (n_read != _pos) {
+	usize const n_read = fread(buffer, 1, _pos, file);
+	if ((i64)n_read != (i64)_pos) {
 		sv = E_FILE_SIZE_MISMATCH;
 		goto _clean_exit;
 	}
 
-	vm->pc	      = 0x200;
-	vm->code_size = n_read;
+	vm_init(vm, buffer, (u32)n_read);
 
 _clean_exit:
 	fclose(file);

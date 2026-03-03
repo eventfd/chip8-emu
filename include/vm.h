@@ -39,7 +39,7 @@ struct vm {
 
 typedef void (*vm_cb_fn)(struct vm *vm, enum vm_event ev, void *arg);
 
-void vm_init(struct vm *vm);
+void vm_init(struct vm *vm, u8 const *code, u32 code_len);
 void vm_step(struct vm *vm, vm_cb_fn callback);
 
 #endif // CHIP8_VM_H

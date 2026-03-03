@@ -183,6 +183,11 @@ cpu_clock_handler(void *userdata, SDL_TimerID timer_id, u64 interval)
 	UNUSED(interval);
 	struct context *const ctx = (struct context *)userdata;
 
+	/* handle the delay timer*/
+	if (ctx->vm.delay_timer) {
+		ctx->vm.delay_timer -= 1;
+	}
+
 	/* run the cpu */
 	vm_step(&ctx->vm, vm_callback);
 	if (ctx->config.verbose >= 2) {
@@ -222,12 +227,13 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 		if (0 > ctx->vm.kbd_r || ctx->vm.kbd_r >= 16) {
 			break;
 		}
-		if ((SDLK_0 <= kev->key && kev->key <= SDLK_9)
-			|| (SDLK_A <= kev->key && kev->key <= SDLK_F)) {
-			if (ctx->config.verbose) {
-				SDL_Log("KeyPress: %u", kev->key);
-			}
-			ctx->vm.regs[ctx->vm.kbd_r] = kev->key;
+		if (ctx->config.verbose) {
+			SDL_Log("KeyPress: %u", kev->key);
+		}
+		if (SDLK_0 <= kev->key && kev->key <= SDLK_9) {
+			ctx->vm.regs[ctx->vm.kbd_r] = kev->key - SDLK_0;
+		} else if (SDLK_A <= kev->key && kev->key <= SDLK_F) {
+			ctx->vm.regs[ctx->vm.kbd_r] = kev->key - SDLK_A;
 		}
 		break;
 	case EV_DRAW:

@@ -9,16 +9,21 @@ typedef void (*disasm_cb_fn)(char const *str);
 
 static void disasm_instr(struct vm const *vm, disasm_cb_fn cb);
 static void _puts(char const *str);
+static void init_sprites(struct vm *vm);
 
 #define READ_INSTR(ptr, off)                                 \
 	((u16)((ptr)[(off)]) << 8 | (u16)((ptr)[(off) + 1]))
 
 void
-vm_init(struct vm *vm)
+vm_init(struct vm *vm, u8 const *code, u32 code_len)
 {
 	memset(vm, 0, sizeof(struct vm));
-	vm->kbd_r = -1;
-	vm->state = VM_RESUME;
+	vm->kbd_r     = -1;
+	vm->state     = VM_RESUME;
+	vm->pc	      = 0x200;
+	vm->code_size = code_len;
+	memcpy(&vm->mem[0x200], code, code_len);
+	init_sprites(vm);
 }
 
 void
@@ -249,27 +254,37 @@ vm_step(struct vm *vm, vm_cb_fn callback)
 		case 0x1e:
 			/* ADD I, Vx */
 			r = (raw_opcode >> 8) & 0xfu;
-			vm->i += (u16)r;
+			vm->i += (u16)vm->regs[r];
 			break;
 		case 0x29:
-			r = (raw_opcode >> 8) & 0xfu;
-			/* TODO: load sprite for digit regs[r] */
+			/* LD F, Vx */
+			r     = (raw_opcode >> 8) & 0xfu;
+			vm->i = 0x5u * (u16)vm->regs[r];
+			break;
+		case 0x33:
+			/* LD B, Vx */
+			r		   = vm->regs[(raw_opcode >> 8) & 0xfu];
+			vm->mem[vm->i]	   = ((u32)r / 100) & 0xffu;
+			vm->mem[vm->i + 1] = ((u32)r / 10) % 10 & 0xffu;
+			vm->mem[vm->i + 2] = ((u32)r % 100) & 0xffu;
 			break;
 		case 0x55:
 			/* LD [I], Vx */
-			r = (raw_opcode >> 8) & 0xfu;
+			r = vm->regs[(raw_opcode >> 8) & 0xfu];
 			if (vm->i + (u16)r >= sizeof(vm->mem)) {
 				break;
 			}
 			memcpy(&vm->mem[vm->i], &vm->regs[0], r);
+			vm->i += r + 1;
 			break;
 		case 0x65:
 			/* LD Vx, [I] */
-			r = (raw_opcode >> 8) & 0xfu;
+			r = vm->regs[(raw_opcode >> 8) & 0xfu];
 			if (vm->i + (u16)r >= sizeof(vm->mem)) {
 				break;
 			}
 			memcpy(&vm->regs[0], &vm->mem[vm->i], r);
+			vm->i += r + 1;
 			break;
 		default:
 			break;
@@ -436,7 +451,7 @@ disasm_instr(struct vm const *vm, disasm_cb_fn cb)
 		case 0x7:
 			/* LD Vx, DT */
 			r = (raw_opcode >> 8) & 0xfu;
-			snprintf(buffer + 6, 121, "%-4s V%u", "DT", r);
+			snprintf(buffer + 6, 121, "%-4s V%u, DT", "LD", r);
 			break;
 		case 0xa:
 			/* LD Vx, K */
@@ -449,6 +464,7 @@ disasm_instr(struct vm const *vm, disasm_cb_fn cb)
 			snprintf(buffer + 6, 121, "%-4s ST, V%u", "LD", r);
 			break;
 		case 0x29:
+			/* LD F, Vx */
 			r = (raw_opcode >> 8) & 0xfu;
 			/* TODO: load sprite for digit regs[r] */
 			snprintf(buffer + 6, 121, "%-4s F, V%u", "LD", r);
@@ -467,4 +483,31 @@ void
 _puts(char const *str)
 {
 	(void)puts(str);
+}
+
+void
+init_sprites(struct vm *vm)
+{
+	static u8 sprites[][5] = {
+		{0xf0, 0x90, 0x90, 0x90, 0xf0}, /* 0 */
+		{0x20, 0x60, 0x20, 0x20, 0x70}, /* 1 */
+		{0xf0, 0x10, 0xf0, 0x80, 0xf0}, /* 2 */
+		{0xf0, 0x10, 0xf0, 0x10, 0xf0}, /* 3 */
+		{0x90, 0x90, 0xf0, 0x10, 0x10}, /* 4 */
+		{0xf0, 0x80, 0xf0, 0x10, 0xf0}, /* 5 */
+		{0xf0, 0x80, 0xf0, 0x90, 0xf0}, /* 6 */
+		{0xf0, 0x10, 0x20, 0x40, 0x40}, /* 7 */
+		{0xf0, 0x90, 0xf0, 0x90, 0xf0}, /* 8 */
+		{0xf0, 0x90, 0xf0, 0x10, 0xf0}, /* 9 */
+		{0xf0, 0x90, 0xf0, 0x90, 0x90}, /* A */
+		{0xf0, 0x90, 0xe0, 0x90, 0xe0}, /* B */
+		{0xf0, 0x80, 0x80, 0x80, 0xf0}, /* C */
+		{0xe0, 0x90, 0x90, 0x90, 0xe0}, /* D */
+		{0xf0, 0x80, 0xf0, 0x80, 0xf0}, /* E */
+		{0xf0, 0x80, 0xf0, 0x80, 0x80}, /* F */
+	};
+
+	for (u32 i = 0; i != 16; i++) {
+		memcpy(&vm->mem[i * 5], sprites[i], 5);
+	}
 }
