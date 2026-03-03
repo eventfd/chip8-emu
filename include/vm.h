@@ -37,9 +37,9 @@ struct vm {
 	_Atomic(enum vm_state) state;
 };
 
-typedef void (*vm_callback_fn)(struct vm *vm, enum vm_event ev, void *arg);
+typedef void (*vm_cb_fn)(struct vm *vm, enum vm_event ev, void *arg);
 
 void vm_init(struct vm *vm);
-void vm_step(struct vm *vm, vm_callback_fn callback);
+void vm_step(struct vm *vm, vm_cb_fn callback);
 
 #endif // CHIP8_VM_H

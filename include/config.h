@@ -5,8 +5,8 @@
 
 struct config {
 	char const *rom_file;
-	u32	    width;
-	u32	    height;
+	u32	    dx;
+	u32	    dy;
 	u32	    clock_speed; /* Hz */
 	u8	    verbose;
 	bool	    disasm;

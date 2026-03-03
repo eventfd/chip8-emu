@@ -1,4 +1,5 @@
 #include "chip.h"
+#include "util.h"
 #include <stdlib.h>
 
 extern enum status chip_main(i32 argc, char *argv[const]);
@@ -16,11 +17,11 @@ main(i32 argc, char *argv[const])
 		return EXIT_SUCCESS;
 	}
 	if (sv < 0 || sv > E_GENERIC) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+		LOG_ERROR(SDL_LOG_CATEGORY_APPLICATION,
 			"Invalid Error Status: '%d'", sv);
 		/* invalid return value */
 	} else if (sv != E_ARG_PARSE) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+		LOG_ERROR(SDL_LOG_CATEGORY_APPLICATION,
 			"Emulation Failed due to '%s'", error_desc[sv]);
 	}
 	return EXIT_FAILURE;
