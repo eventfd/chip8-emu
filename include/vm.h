@@ -4,31 +4,36 @@
 #include "typedefs.h"
 
 enum vm_event {
-	EV_SOUND     = 1,
-	EV_TIMER     = 2,
-	EV_DRAW	     = 3,
-	EV_CLS	     = 4,
-	EV_KEY_PRESS = 5,
+	EV_TIMER     = 1,
+	EV_DRAW	     = 2,
+	EV_KEY_PRESS = 4,
 	EV_MAX,
 };
 
 enum vm_state {
-	VM_IDLE = 0,
-	VM_WAIT = 1,
+	VM_RESUME = 0,
+	VM_WAIT	  = 1,
+};
+
+struct draw_params {
+	u8 buf[16];
+	u8 x;
+	u8 y;
+	u8 n;
 };
 
 struct vm {
-	u8		       code[0xe00];
+	u8		       mem[0x1000];
 	u32		       code_size;
 	u8		       regs[16];
-	u8		       stack[64];
-	u8		       fb[64][32];
+	u16		       stack[32];
+	u8		       fb[32 * 64];
 	u16		       pc;
-	u16		       ir;
+	u16		       i;
 	u16		       sp;
-	u16		       kbd_r;
-	i16		       delay_timer;
-	i16		       sound_timer;
+	i8		       kbd_r;
+	u16		       delay_timer;
+	_Atomic(u16)	       sound_timer;
 	_Atomic(enum vm_state) state;
 };
 

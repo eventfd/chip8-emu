@@ -22,6 +22,12 @@ static struct option const opts[] = {
 		.val	 = 'C',
 	 },
 	{
+		.name	 = "disasm",
+		.has_arg = no_argument,
+		.flag	 = nullptr,
+		.val	 = 'D',
+	 },
+	{
 		.name	 = "help",
 		.has_arg = no_argument,
 		.flag	 = nullptr,
@@ -60,6 +66,7 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 		.height	     = 480,
 		.clock_speed = 60,
 		.verbose     = 0,
+		.disasm	     = true,
 	};
 
 	for (;;) {
@@ -78,7 +85,10 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 			break;
 		case 'C':
 			tmp.clock_speed = SDL_strtoul(optarg, nullptr, 0);
-			tmp.clock_speed = SDL_max(tmp.clock_speed, 60);
+			tmp.clock_speed = SDL_max(tmp.clock_speed, 1);
+			break;
+		case 'D':
+			tmp.disasm = true;
 			break;
 		case 'V':
 			tmp.verbose = 1;

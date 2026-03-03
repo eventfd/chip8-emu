@@ -28,4 +28,7 @@ typedef uintptr_t usize;
 
 #define UNUSED(arg) ((void)(arg))
 
+#define container_of(ptr, ctr_ty, ctr_member_name)                  \
+	(ctr_ty *)((u8 *)(ptr) - offsetof(ctr_ty, ctr_member_name))
+
 #endif // CHIP_TYPES_H

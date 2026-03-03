@@ -9,6 +9,7 @@ struct config {
 	u32	    height;
 	u32	    clock_speed; /* Hz */
 	u8	    verbose;
+	bool	    disasm;
 };
 
 #endif // CHIP_CONFIG

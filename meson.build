@@ -1,7 +1,7 @@
 project('chip8-emu'
     , 'c'
     , version: '1.0'
-, default_options: {
+    , default_options: {
           'c_std': 'c23'
         , 'buildtype': 'debug'
         , 'optimization': 'g'
@@ -18,6 +18,9 @@ src = files(
     , 'src/chip.c'
     , 'src/argv.c'
     , 'src/vm.c'
+    , 'src/rand.c'
+    , 'src/util.c'
+    , 'src/allocator.c'
 )
 
 sdl = dependency('sdl3')

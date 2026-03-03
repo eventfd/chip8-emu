@@ -1,6 +1,8 @@
 #include "chip.h"
+#include "allocator.h"
 #include "argv.h"
 #include "config.h"
+#include "rand.h"
 #include "rom.h"
 #include "vm.h"
 #include <SDL3/SDL.h>
@@ -8,15 +10,17 @@
 #define HZ_TO_NS(hz) (UINT64_C(1000000000) / (hz))
 #define RGB(r, g, b) ((u32)(r) | (u32)(g) << 8 | (u32)(b) << 16)
 
-static u64  _clock_pulse(void *userdata, SDL_TimerID timerID, u64 interval);
-static void _vm_on_event(struct vm *vm, enum vm_event ev, void *arg);
-static void _put_event(i32 code, void *data1, void *data2);
+static u64 cpu_clock_handler(void *userdata, SDL_TimerID timerID, u64 interval);
+static u64 sound_clock_handler(
+	void *userdata, SDL_TimerID timerID, u64 interval);
+static void vm_callback(struct vm *vm, enum vm_event ev, void *arg);
+static void post_event(i32 code, void *data1, void *data2, u32 size);
 static void _handle_event(struct context *ctx, SDL_UserEvent const *event);
 static void _play_beep(struct context *ctx);
 
-constexpr u32 AUDIO_FREQ      = 441;
+constexpr u32 AUDIO_FREQ      = 750;
 constexpr u32 SAMPLE_RATE     = 44100;
-constexpr u32 SAMPLE_DURATION = 300; /* millis */
+constexpr u32 SAMPLE_DURATION = 200; /* millis */
 constexpr u32 AUDIO_SIZE      = SAMPLE_RATE * SAMPLE_DURATION / 1000;
 static u8     audio_samples[AUDIO_SIZE];
 
@@ -66,7 +70,7 @@ chip_main(i32 argc, char *argv[const])
 	}
 
 	SDL_Texture *const texture = SDL_CreateTexture(ctx.renderer,
-		SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
+		SDL_PIXELFORMAT_RGB332, SDL_TEXTUREACCESS_STREAMING,
 		ctx.config.width, ctx.config.height);
 	if (!texture) {
 		sv = E_SDL_TEXTURE_INIT;
@@ -77,7 +81,7 @@ chip_main(i32 argc, char *argv[const])
 
 	ctx.texture = texture;
 	/* clear the screen first */
-	_vm_on_event(&ctx.vm, EV_CLS, nullptr);
+	vm_callback(&ctx.vm, EV_DRAW, nullptr);
 
 	/* initialize audio device */
 	SDL_AudioSpec const audio_spec = {
@@ -105,9 +109,16 @@ chip_main(i32 argc, char *argv[const])
 		audio_samples[i] = (u8)_sin;
 	}
 
-	/* initialize clock */
-	SDL_AddTimerNS(
-		HZ_TO_NS(ctx.config.clock_speed), _clock_pulse, (void *)&ctx);
+	/* initialize random number generator */
+	rnd_init(SDL_GetTicks());
+
+	/* initialize cpu clock */
+	SDL_AddTimerNS(HZ_TO_NS(ctx.config.clock_speed), cpu_clock_handler,
+		(void *)&ctx);
+
+	/* BUGFIX: sound timer has a separate clock */
+	SDL_AddTimerNS(HZ_TO_NS(ctx.config.clock_speed), sound_clock_handler,
+		(void *)&ctx);
 
 	/* start the event loop */
 	for (;;) {
@@ -146,38 +157,33 @@ _exit:
 }
 
 void
-_put_event(i32 code, void *data1, void *data2)
+post_event(i32 code, void *data1, void *data2, u32 data2_size)
 {
-	SDL_PushEvent(&(SDL_Event) {
-		.user = {
-			.type = SDL_EVENT_USER,
-			.code = code,
-			.data1 = data1,
-			.data2 = data2,
-		},
-	});
+	SDL_Event ev = {0};
+	if (data2 && data2_size) {
+		/* escape to heap */
+		void *hptr = heap_alloc(data2_size);
+		memcpy(hptr, data2, data2_size);
+		data2 = hptr;
+	}
+	ev.user = (SDL_UserEvent){
+		.type  = SDL_EVENT_USER,
+		.code  = code,
+		.data1 = data1,
+		.data2 = data2,
+	};
+	SDL_PushEvent(&ev);
 }
 
 u64
-_clock_pulse(void *userdata, SDL_TimerID timer_id, u64 interval)
+cpu_clock_handler(void *userdata, SDL_TimerID timer_id, u64 interval)
 {
 	UNUSED(timer_id);
 	UNUSED(interval);
 	struct context *const ctx = (struct context *)userdata;
 
-	/* evaluate sound timer */
-	i16 const sound_timer = ctx->vm.sound_timer;
-	if (sound_timer >= 0) {
-		if (!sound_timer) {
-			atomic_store(&ctx->vm.state, VM_WAIT);
-			SDL_Log("Sound Event at Addr: %#x", ctx->vm.pc);
-			_put_event(EV_SOUND, nullptr, nullptr);
-		}
-		ctx->vm.sound_timer = sound_timer - 1;
-	}
-
 	/* run the cpu */
-	vm_step(&ctx->vm, _vm_on_event);
+	vm_step(&ctx->vm, vm_callback);
 	if (ctx->config.verbose >= 2) {
 		SDL_Log("> Clock Event at %" PRIu64 "  ms", SDL_GetTicks());
 	}
@@ -186,17 +192,14 @@ _clock_pulse(void *userdata, SDL_TimerID timer_id, u64 interval)
 }
 
 void
-_vm_on_event(struct vm *vm, enum vm_event ev, void *arg)
+vm_callback(struct vm *vm, enum vm_event ev, void *arg)
 {
 	atomic_store(&vm->state, VM_WAIT);
 	UNUSED(vm);
 
 	switch (ev) {
-	case EV_CLS:
-		_put_event(EV_CLS, nullptr, nullptr);
-		break;
-	case EV_KEY_PRESS:
-		_put_event(EV_KEY_PRESS, arg, nullptr);
+	case EV_DRAW:
+		post_event(EV_DRAW, nullptr, arg, 0);
 		break;
 	default:
 		break;
@@ -208,44 +211,44 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 {
 	SDL_KeyboardEvent const *kev = (SDL_KeyboardEvent const *)event->data1;
 
-	u8 *pixels;
-	i32 row_len;
-
-	bool const rv = SDL_LockTexture(
-		ctx->texture, nullptr, (void **)&pixels, &row_len);
-	if (!rv) {
-		goto _exit;
-	}
+	u8  *pixels;
+	i32  width;
+	bool rv;
 
 	switch (event->code) {
-	case EV_CLS:
-		/* clear screen to black */
-		for (u32 i = 0; i != ctx->config.width * ctx->config.height;
-			i++) {
-			pixels[i * 3]	  = 0;
-			pixels[i * 3 + 1] = 0;
-			pixels[i * 3 + 2] = 0;
-		}
-		break;
 	case EV_KEY_PRESS:
-		if (ctx->config.verbose) {
-			SDL_Log("KeyPress: %u", kev->key);
+		if (0 > ctx->vm.kbd_r || ctx->vm.kbd_r >= 16) {
+			break;
 		}
-		if (ctx->vm.kbd_r < 16) {
+		if ((SDLK_0 <= kev->key && kev->key <= SDLK_9)
+			|| (SDLK_A <= kev->key && kev->key <= SDLK_F)) {
+			if (ctx->config.verbose) {
+				SDL_Log("KeyPress: %u", kev->key);
+			}
 			ctx->vm.regs[ctx->vm.kbd_r] = kev->key;
 		}
 		break;
-	case EV_SOUND:
-		_play_beep(ctx);
+	case EV_DRAW:
+		rv = SDL_LockTexture(
+			ctx->texture, nullptr, (void **)&pixels, &width);
+		if (!rv) {
+			break;
+		}
+		/* sync the framebuffer */
+		for (u32 y = 0; y != ctx->config.height; y++) {
+			for (u32 x = 0; x != ctx->config.width; x++) {
+				pixels[y * ctx->config.width + x]
+					= ctx->vm.fb[64 * (y / 15) + x / 10];
+			}
+		}
+		SDL_UnlockTexture(ctx->texture);
 		break;
 	default:
 		break;
 	}
 
-	SDL_UnlockTexture(ctx->texture);
 	/* unblock the cpu */
-_exit:
-	atomic_store(&ctx->vm.state, VM_IDLE);
+	atomic_store(&ctx->vm.state, VM_RESUME);
 }
 
 void
@@ -255,4 +258,20 @@ _play_beep(struct context *ctx)
 	SDL_PutAudioStreamData(ctx->audio_stream, audio_samples, AUDIO_SIZE);
 	SDL_Delay(SAMPLE_DURATION);
 	SDL_PauseAudioStreamDevice(ctx->audio_stream);
+}
+
+u64
+sound_clock_handler(void *userdata, SDL_TimerID timerID, u64 interval)
+{
+	UNUSED(timerID);
+	struct context *const ctx = (struct context *)userdata;
+
+	/* evaluate sound timer */
+	u16 const sound_timer = atomic_load(&ctx->vm.sound_timer);
+	if (sound_timer) {
+		_play_beep(ctx);
+		atomic_store(&ctx->vm.sound_timer, sound_timer - 1);
+	}
+
+	return interval;
 }
