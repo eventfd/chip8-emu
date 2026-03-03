@@ -56,7 +56,7 @@ parse_rom(struct vm *vm, struct config const *cfg)
 	}
 
 	/* max addressable space is 0xe00 bytes */
-	if (_pos > 0xe00) {
+	if (_pos + 0x200 > (isize)sizeof(vm->mem)) {
 		sv = E_FILE_TOO_LARGE;
 		goto _clean_exit;
 	}
@@ -75,12 +75,13 @@ parse_rom(struct vm *vm, struct config const *cfg)
 		goto _clean_exit;
 	}
 
-	i32 const n_read = fread(vm->code, 1, _pos, file);
+	i32 const n_read = fread(&vm->mem[0x200], 1, _pos, file);
 	if (n_read != _pos) {
 		sv = E_FILE_SIZE_MISMATCH;
 		goto _clean_exit;
 	}
 
+	vm->pc	      = 0x200;
 	vm->code_size = n_read;
 
 _clean_exit:
