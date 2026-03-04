@@ -219,11 +219,16 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 
 	u8  *pixels;
 	i32  tmp_w;
-	u32  width, height;
+	u32  width, height, mask;
 	bool rv;
 
 	switch (event->code) {
 	case EV_KEY_PRESS:
+		if (SDLK_0 <= kev->key && kev->key <= SDLK_9) {
+			mask = 1 << (kev->key - SDLK_0);
+			ctx->vm.keymap |= mask;
+		}
+		/* WIP */
 		if (0 > ctx->vm.kbd_r || ctx->vm.kbd_r >= 16) {
 			break;
 		}

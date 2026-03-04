@@ -32,6 +32,7 @@ struct vm {
 	u16		       i;
 	u16		       sp;
 	i8		       kbd_r;
+	u16		       keymap; /* 16 bits */
 	u16		       delay_timer;
 	_Atomic(u16)	       sound_timer;
 	_Atomic(enum vm_state) state;
