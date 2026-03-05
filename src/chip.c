@@ -18,6 +18,7 @@ static void vm_callback(struct vm *vm, enum vm_event ev, void *arg);
 static void post_event(i32 code, void *data1, void *data2, u32 size);
 static void _handle_event(struct context *ctx, SDL_UserEvent const *event);
 static void _play_beep(struct context *ctx);
+static void update_key_state(struct context *ctx);
 
 constexpr u32 AUDIO_FREQ      = 750;
 constexpr u32 SAMPLE_RATE     = 44100;
@@ -38,10 +39,10 @@ chip_main(i32 argc, char *argv[const])
 	}
 
 	if (ctx.config.verbose) {
-		SDL_Log("ROM File: %s", ctx.config.rom_file);
-		SDL_Log("Width: %u", ctx.config.dx);
-		SDL_Log("Height: %u", ctx.config.dy);
-		SDL_Log("Clock (Hz): %u", ctx.config.clock_speed);
+		LOG_INFO("ROM File: %s", ctx.config.rom_file);
+		LOG_INFO("Width: %" PRIu32, ctx.config.dx);
+		LOG_INFO("Height: %" PRIu32, ctx.config.dy);
+		LOG_INFO("Clock (Hz): %" PRIu64, ctx.config.clock_speed);
 	}
 
 	sv = parse_rom(&ctx.vm, &ctx.config);
@@ -122,30 +123,30 @@ chip_main(i32 argc, char *argv[const])
 		(void *)&ctx);
 
 	/* start the event loop */
-	for (;;) {
-		if (!SDL_WaitEvent(&event)) {
-			continue;
+	bool is_running = true;
+	while (is_running) {
+		while (SDL_PollEvent(&event)) {
+			update_key_state(&ctx);
+			if (event.type == SDL_EVENT_QUIT) {
+				is_running = false;
+			} else if (event.type == ctx.user_event) {
+				_handle_event(&ctx, &event.user);
+			} else if (event.type == SDL_EVENT_KEY_UP) {
+				_handle_event(
+					&ctx, &(SDL_UserEvent){
+						      .type  = SDL_EVENT_USER,
+						      .code  = EV_KEY_PRESS,
+						      .data1 = &event.key,
+					      });
+			}
 		}
-		if (event.type == SDL_EVENT_QUIT) {
-			goto _exit_loop;
-		} else if (event.type == ctx.user_event) {
-			_handle_event(&ctx, &event.user);
-		} else if (event.type == SDL_EVENT_KEY_UP) {
-			_handle_event(&ctx, &(SDL_UserEvent){
-						    .type  = SDL_EVENT_USER,
-						    .code  = EV_KEY_PRESS,
-						    .data1 = &event.key,
-					    });
-		}
-
 		SDL_RenderClear(ctx.renderer);
 		SDL_RenderTexture(ctx.renderer, ctx.texture, nullptr, nullptr);
 		SDL_RenderPresent(ctx.renderer);
 	}
 
-	SDL_DestroyAudioStream(ctx.audio_stream);
-
 _exit_loop:
+	SDL_DestroyAudioStream(ctx.audio_stream);
 	SDL_DestroyRenderer(ctx.renderer);
 	SDL_DestroyWindow(ctx.window);
 
@@ -183,10 +184,15 @@ cpu_clock_handler(void *userdata, SDL_TimerID timer_id, u64 interval)
 	UNUSED(interval);
 	struct context *const ctx = (struct context *)userdata;
 
+	/* handle the delay timer*/
+	if (ctx->vm.delay_timer) {
+		ctx->vm.delay_timer -= 1;
+	}
+
 	/* run the cpu */
 	vm_step(&ctx->vm, vm_callback);
 	if (ctx->config.verbose >= 2) {
-		SDL_Log("> Clock Event at %" PRIu64 "  ms", SDL_GetTicks());
+		LOG_INFO("> Clock Event at %" PRIu64 "  ms", SDL_GetTicks());
 	}
 
 	return HZ_TO_NS(ctx->config.clock_speed);
@@ -212,22 +218,25 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 {
 	SDL_KeyboardEvent const *kev = (SDL_KeyboardEvent const *)event->data1;
 
-	u8  *pixels;
-	i32  tmp_w;
-	u32  width, height;
-	bool rv;
+	u8	     *pixels;
+	i32	      tmp_w;
+	u32	      width, height;
+	bool	      rv;
+	enum vm_state expected = VM_WAIT;
 
 	switch (event->code) {
 	case EV_KEY_PRESS:
+		/* handle waiting key presses */
 		if (0 > ctx->vm.kbd_r || ctx->vm.kbd_r >= 16) {
 			break;
 		}
-		if ((SDLK_0 <= kev->key && kev->key <= SDLK_9)
-			|| (SDLK_A <= kev->key && kev->key <= SDLK_F)) {
-			if (ctx->config.verbose) {
-				SDL_Log("KeyPress: %u", kev->key);
-			}
-			ctx->vm.regs[ctx->vm.kbd_r] = kev->key;
+		if (ctx->config.verbose) {
+			LOG_INFO("Key Press Event: %u", kev->key);
+		}
+		if (SDLK_0 <= kev->key && kev->key <= SDLK_9) {
+			ctx->vm.regs[ctx->vm.kbd_r] = kev->key - SDLK_0;
+		} else if (SDLK_A <= kev->key && kev->key <= SDLK_F) {
+			ctx->vm.regs[ctx->vm.kbd_r] = kev->key - SDLK_A;
 		}
 		break;
 	case EV_DRAW:
@@ -252,8 +261,8 @@ _handle_event(struct context *ctx, SDL_UserEvent const *event)
 		break;
 	}
 
-	/* unblock the cpu */
-	atomic_store(&ctx->vm.state, VM_RESUME);
+	/* unblock the cpu if it is waiting */
+	atomic_compare_exchange_strong(&ctx->vm.state, &expected, VM_RESUME);
 }
 
 void
@@ -279,4 +288,25 @@ sound_clock_handler(void *userdata, SDL_TimerID timerID, u64 interval)
 	}
 
 	return interval;
+}
+
+void
+update_key_state(struct context *ctx)
+{
+	static u8 sc[] = {SDL_SCANCODE_0, SDL_SCANCODE_1, SDL_SCANCODE_2,
+		SDL_SCANCODE_3, SDL_SCANCODE_4, SDL_SCANCODE_5, SDL_SCANCODE_6,
+		SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9, SDL_SCANCODE_A,
+		SDL_SCANCODE_B, SDL_SCANCODE_C, SDL_SCANCODE_D, SDL_SCANCODE_E,
+		SDL_SCANCODE_F};
+	static bool const *keymap = nullptr;
+	if (!keymap) {
+		keymap = SDL_GetKeyboardState(nullptr);
+	}
+
+	u16 mask = 0;
+	for (u32 i = 0; i != 16; i++) {
+		mask |= (u16)keymap[sc[i]] << i;
+	}
+
+	atomic_store(&ctx->vm.keymap, mask);
 }

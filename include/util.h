@@ -9,4 +9,7 @@ void asm_break(void);
 #define LOG_ERROR(ty, fmt, ...)                                           \
 	SDL_LogError(ty, __FILE__ ":" STR(__LINE__) " " fmt, __VA_ARGS__)
 
+#define LOG_INFO(fmt, ...)                                       \
+	SDL_Log(__FILE__ ":" STR(__LINE__) " " fmt, __VA_ARGS__)
+
 #endif // CHIP8_UTIL_H

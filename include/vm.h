@@ -6,20 +6,12 @@
 enum vm_event {
 	EV_TIMER     = 1,
 	EV_DRAW	     = 2,
-	EV_KEY_PRESS = 4,
-	EV_MAX,
+	EV_KEY_PRESS = 3,
 };
 
 enum vm_state {
 	VM_RESUME = 0,
 	VM_WAIT	  = 1,
-};
-
-struct draw_params {
-	u8 buf[16];
-	u8 x;
-	u8 y;
-	u8 n;
 };
 
 struct vm {
@@ -33,13 +25,14 @@ struct vm {
 	u16		       sp;
 	i8		       kbd_r;
 	u16		       delay_timer;
+	_Atomic(u16)	       keymap;
 	_Atomic(u16)	       sound_timer;
 	_Atomic(enum vm_state) state;
 };
 
 typedef void (*vm_cb_fn)(struct vm *vm, enum vm_event ev, void *arg);
 
-void vm_init(struct vm *vm);
+void vm_init(struct vm *vm, u8 const *code, u32 code_len);
 void vm_step(struct vm *vm, vm_cb_fn callback);
 
 #endif // CHIP8_VM_H

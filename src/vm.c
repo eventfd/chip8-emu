@@ -9,16 +9,21 @@ typedef void (*disasm_cb_fn)(char const *str);
 
 static void disasm_instr(struct vm const *vm, disasm_cb_fn cb);
 static void _puts(char const *str);
+static void init_sprites(struct vm *vm);
 
 #define READ_INSTR(ptr, off)                                 \
 	((u16)((ptr)[(off)]) << 8 | (u16)((ptr)[(off) + 1]))
 
 void
-vm_init(struct vm *vm)
+vm_init(struct vm *vm, u8 const *code, u32 code_len)
 {
 	memset(vm, 0, sizeof(struct vm));
-	vm->kbd_r = -1;
-	vm->state = VM_RESUME;
+	vm->kbd_r     = -1;
+	vm->state     = VM_RESUME;
+	vm->pc	      = 0x200;
+	vm->code_size = code_len;
+	memcpy(&vm->mem[0x200], code, code_len);
+	init_sprites(vm);
 }
 
 void
@@ -228,18 +233,41 @@ vm_step(struct vm *vm, vm_cb_fn callback)
 		}
 		callback(vm, EV_DRAW, nullptr);
 		break;
+	case 0xe:
+		switch (raw_opcode & 0x0ff) {
+		case 0x09eu:
+			/* SKP Vx */
+			r = (raw_opcode >> 8) & 0x0f;
+			if ((vm->keymap >> vm->regs[r]) & 0x1) {
+				vm->pc += 2;
+			}
+			break;
+		case 0x0A1u:
+			/* SKNP Vx */
+			r = (raw_opcode >> 8) & 0x0f;
+			if (!((vm->keymap >> vm->regs[r]) & 0x1)) {
+				vm->pc += 2;
+			}
+			break;
+		}
+		break;
 	case 0xf:
 		switch (raw_opcode & 0xffu) {
 		case 0x7:
 			/* LD Vx, DT */
-			r		= (raw_opcode >> 8) & 0xfu;
-			vm->delay_timer = vm->regs[r];
+			r	    = (raw_opcode >> 8) & 0xfu;
+			vm->regs[r] = vm->delay_timer;
 			break;
 		case 0xa:
 			/* LD Vx, K */
 			r	  = (raw_opcode >> 8) & 0xfu;
 			vm->kbd_r = (i8)r;
 			callback(vm, EV_KEY_PRESS, &vm->regs[r]);
+			break;
+		case 0x15:
+			/* LD DT, Vx */
+			r		= (raw_opcode >> 8) & 0xfu;
+			vm->delay_timer = vm->regs[r];
 			break;
 		case 0x18:
 			/* LD ST, Vx */
@@ -249,27 +277,38 @@ vm_step(struct vm *vm, vm_cb_fn callback)
 		case 0x1e:
 			/* ADD I, Vx */
 			r = (raw_opcode >> 8) & 0xfu;
-			vm->i += (u16)r;
+			vm->i += (u16)vm->regs[r];
 			break;
 		case 0x29:
-			r = (raw_opcode >> 8) & 0xfu;
-			/* TODO: load sprite for digit regs[r] */
+			/* LD F, Vx */
+			r     = (raw_opcode >> 8) & 0xfu;
+			vm->i = 0x5u * (u16)vm->regs[r];
+			break;
+		case 0x33:
+			/* LD B, Vx */
+			r = vm->regs[(raw_opcode >> 8) & 0xfu];
+			for (u32 i = 0; i != 3; i++) {
+				vm->mem[2 - i + vm->i] = r % 10;
+				r /= 10;
+			}
 			break;
 		case 0x55:
 			/* LD [I], Vx */
 			r = (raw_opcode >> 8) & 0xfu;
-			if (vm->i + (u16)r >= sizeof(vm->mem)) {
+			if (vm->i + (u16)r + 1 >= sizeof(vm->mem)) {
 				break;
 			}
-			memcpy(&vm->mem[vm->i], &vm->regs[0], r);
+			memcpy(&vm->mem[vm->i], &vm->regs[0], r + 1);
+			vm->i += r + 1;
 			break;
 		case 0x65:
 			/* LD Vx, [I] */
 			r = (raw_opcode >> 8) & 0xfu;
-			if (vm->i + (u16)r >= sizeof(vm->mem)) {
+			if (vm->i + (u16)r + 1 >= sizeof(vm->mem)) {
 				break;
 			}
-			memcpy(&vm->regs[0], &vm->mem[vm->i], r);
+			memcpy(&vm->regs[0], &vm->mem[vm->i], r + 1);
+			vm->i += r + 1;
 			break;
 		default:
 			break;
@@ -292,16 +331,16 @@ disasm_instr(struct vm const *vm, disasm_cb_fn cb)
 	u16 raw_opcode = READ_INSTR(vm->mem, vm->pc - 2);
 
 	switch (raw_opcode) {
-	case 0xe0:
+	case 0x0e0u:
 		strncat(buffer, "CLS", 4);
-		break;
-	case 0xee:
+		cb(buffer);
+		return;
+	case 0x0eeu:
 		strncat(buffer, "RET", 4);
-		break;
-	default:
-		break;
+		cb(buffer);
+		return;
 	}
-	switch ((raw_opcode >> 12) & 0xfu) {
+	switch ((raw_opcode >> 12) & 0x0fu) {
 	case 0x1:
 		/* JP addr */
 		addr = raw_opcode & 0xfffu;
@@ -431,32 +470,53 @@ disasm_instr(struct vm const *vm, disasm_cb_fn cb)
 		snprintf(buffer + 6, 121, "%-4s V%u, V%u, %#01x", "DRW", d, r,
 			imm);
 		break;
-	case 0xf:
-		switch (raw_opcode & 0xffu) {
+	case 0xfu:
+		switch (raw_opcode & 0x0ffu) {
 		case 0x7:
 			/* LD Vx, DT */
 			r = (raw_opcode >> 8) & 0xfu;
-			snprintf(buffer + 6, 121, "%-4s V%u", "DT", r);
+			snprintf(buffer + 6, 121, "%-4s V%u, DT", "LD", r);
 			break;
 		case 0xa:
 			/* LD Vx, K */
 			r = (raw_opcode >> 8) & 0xfu;
 			snprintf(buffer + 6, 121, "%-4s V%u, K", "LD", r);
 			break;
+		case 0x15:
+			/* LD DT, Vx */
+			r = (raw_opcode >> 8) & 0xfu;
+			snprintf(buffer + 6, 121, "%-4s DT, V%u", "LD", r);
+			break;
 		case 0x18:
+			/* LD ST, Vx */
+			r = (raw_opcode >> 8) & 0xfu;
+			snprintf(buffer + 6, 121, "%-4s I, V%u", "ADD", r);
+			break;
+		case 0x1e:
 			/* LD ST, Vx */
 			r = (raw_opcode >> 8) & 0xfu;
 			snprintf(buffer + 6, 121, "%-4s ST, V%u", "LD", r);
 			break;
-		case 0x29:
+		case 0x29u:
+			/* LD F, Vx */
 			r = (raw_opcode >> 8) & 0xfu;
-			/* TODO: load sprite for digit regs[r] */
 			snprintf(buffer + 6, 121, "%-4s F, V%u", "LD", r);
+			break;
+		case 0x55:
+			/* LD [I], Vx */
+			r = (raw_opcode >> 8) & 0xfu;
+			snprintf(buffer + 6, 121, "%-4s [I], V%u", "LD", r);
+			break;
+		case 0x65:
+			/* LD Vx, [I] */
+			r = (raw_opcode >> 8) & 0xfu;
+			snprintf(buffer + 6, 121, "%-4s V%u, [I]", "LD", r);
 			break;
 		default:
 			break;
 		}
 	default:
+		snprintf(buffer + 6, 121, "(unhandled) %04x", raw_opcode);
 		break;
 	}
 
@@ -467,4 +527,31 @@ void
 _puts(char const *str)
 {
 	(void)puts(str);
+}
+
+void
+init_sprites(struct vm *vm)
+{
+	static u8 sprites[][5] = {
+		{0xf0, 0x90, 0x90, 0x90, 0xf0}, /* 0 */
+		{0x20, 0x60, 0x20, 0x20, 0x70}, /* 1 */
+		{0xf0, 0x10, 0xf0, 0x80, 0xf0}, /* 2 */
+		{0xf0, 0x10, 0xf0, 0x10, 0xf0}, /* 3 */
+		{0x90, 0x90, 0xf0, 0x10, 0x10}, /* 4 */
+		{0xf0, 0x80, 0xf0, 0x10, 0xf0}, /* 5 */
+		{0xf0, 0x80, 0xf0, 0x90, 0xf0}, /* 6 */
+		{0xf0, 0x10, 0x20, 0x40, 0x40}, /* 7 */
+		{0xf0, 0x90, 0xf0, 0x90, 0xf0}, /* 8 */
+		{0xf0, 0x90, 0xf0, 0x10, 0xf0}, /* 9 */
+		{0xf0, 0x90, 0xf0, 0x90, 0x90}, /* A */
+		{0xf0, 0x90, 0xe0, 0x90, 0xe0}, /* B */
+		{0xf0, 0x80, 0x80, 0x80, 0xf0}, /* C */
+		{0xe0, 0x90, 0x90, 0x90, 0xe0}, /* D */
+		{0xf0, 0x80, 0xf0, 0x80, 0xf0}, /* E */
+		{0xf0, 0x80, 0xf0, 0x80, 0x80}, /* F */
+	};
+
+	for (u32 i = 0; i != 16; i++) {
+		memcpy(&vm->mem[i * 5], sprites[i], 5);
+	}
 }
