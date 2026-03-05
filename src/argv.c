@@ -62,8 +62,8 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 
 	/* default options */
 	struct config tmp = {
-		.dx    = 10,
-		.dy   = 15,
+		.dx	     = 10,
+		.dy	     = 15,
 		.clock_speed = 60,
 		.verbose     = 0,
 		.disasm	     = 0,
@@ -84,7 +84,7 @@ _parse_argv_impl(struct config *config, i32 argc, char *argv[const])
 			tmp.dy = SDL_max(tmp.dy, 1);
 			break;
 		case 'C':
-			tmp.clock_speed = SDL_strtoul(optarg, nullptr, 0);
+			tmp.clock_speed = SDL_strtoull(optarg, nullptr, 0);
 			tmp.clock_speed = SDL_max(tmp.clock_speed, 1);
 			break;
 		case 'D':

@@ -238,10 +238,16 @@ vm_step(struct vm *vm, vm_cb_fn callback)
 		case 0x09eu:
 			/* SKP Vx */
 			r = (raw_opcode >> 8) & 0x0f;
+			if ((vm->keymap >> vm->regs[r]) & 0x1) {
+				vm->pc += 2;
+			}
 			break;
 		case 0x0A1u:
 			/* SKNP Vx */
 			r = (raw_opcode >> 8) & 0x0f;
+			if (!((vm->keymap >> vm->regs[r]) & 0x1)) {
+				vm->pc += 2;
+			}
 			break;
 		}
 		break;
@@ -464,7 +470,7 @@ disasm_instr(struct vm const *vm, disasm_cb_fn cb)
 		snprintf(buffer + 6, 121, "%-4s V%u, V%u, %#01x", "DRW", d, r,
 			imm);
 		break;
-	case 0xf:
+	case 0xfu:
 		switch (raw_opcode & 0x0ffu) {
 		case 0x7:
 			/* LD Vx, DT */

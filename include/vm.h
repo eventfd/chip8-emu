@@ -6,20 +6,12 @@
 enum vm_event {
 	EV_TIMER     = 1,
 	EV_DRAW	     = 2,
-	EV_KEY_PRESS = 4,
-	EV_MAX,
+	EV_KEY_PRESS = 3,
 };
 
 enum vm_state {
 	VM_RESUME = 0,
 	VM_WAIT	  = 1,
-};
-
-struct draw_params {
-	u8 buf[16];
-	u8 x;
-	u8 y;
-	u8 n;
 };
 
 struct vm {
@@ -32,8 +24,8 @@ struct vm {
 	u16		       i;
 	u16		       sp;
 	i8		       kbd_r;
-	u16		       keymap; /* 16 bits */
 	u16		       delay_timer;
+	_Atomic(u16)	       keymap;
 	_Atomic(u16)	       sound_timer;
 	_Atomic(enum vm_state) state;
 };
